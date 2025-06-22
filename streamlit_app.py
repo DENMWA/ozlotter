@@ -88,11 +88,16 @@ def load_data():
     else:
         return pd.DataFrame()
 
+# -------------------------------
+# App Interface
+import shap
+import matplotlib.pyplot as plt
+
 # Sidebar branding
 st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/thumb/e/e1/Lotto_icon.svg/2048px-Lotto_icon.svg.png", width=100)
 st.sidebar.markdown("## OzLotter")
 st.sidebar.markdown("Smart. Predictive. Evolving.")
-
+# -------------------------------
 st.title("🎯 OzLotter — Intelligent Lotto Insights with Ψⁿˡ(Ω)")
 st.markdown("Welcome to OzLotter — your AI-powered assistant for smarter Oz Lotto predictions.")
 
@@ -111,6 +116,7 @@ with st.expander("📥 Enter New Oz Lotto Draw"):
                 assert len(main_numbers) == 7 and len(supp_numbers) == 3
 
                 st.success(f"Draw saved: {date} | Main: {main_numbers} | Supps: {supp_numbers}")
+                # Append to data/historical_draws.csv (stub, later features extracted)
                 new_row = pd.DataFrame([{"date": date, "main": main, "supp": supp}])
                 if os.path.exists(DATA_PATH):
                     df = pd.read_csv(DATA_PATH)
@@ -129,7 +135,7 @@ with st.expander("📊 Upload Prediction Feature Set for Scoring"):
         df_pred = pd.read_csv(upload)
         if all(col in df_pred.columns for col in ['fourier','entropy','mahalanobis','bayesian','penalty','momentum','integral','avg_freq']):
             df_pred['psi_score'] = psi_nabla_lambda(df_pred)
-            model = load_model()
+            model = load_model()  # deferred and guarded loading
             if model:
                 df_pred['division_pred'] = model.predict(df_pred)
                 df_pred['div_prob'] = model.predict_proba(df_pred).max(axis=1)
@@ -142,7 +148,7 @@ with st.expander("📊 Feature Impact (SHAP Analysis)"):
     df_hist = load_data()
     model = None
     try:
-        model = load_model()
+            model = load_model()
     except Exception as e:
         st.warning("Model loading failed during SHAP analysis. Attempting fallback...")
         if not df_hist.empty and 'division' in df_hist.columns:
