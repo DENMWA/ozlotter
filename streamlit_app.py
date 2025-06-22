@@ -4,16 +4,19 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import joblib
+import shap
+import matplotlib.pyplot as plt
 import os
 from datetime import datetime
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
-import shap
-import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="OzLotter", page_icon="🎯", layout="wide")
 
+# -------------------------------
+# Configurable λ-weights
+# -------------------------------
 LAMBDA = {
     'lambda1': 1.0,
     'lambda2': 1.0,
@@ -28,6 +31,9 @@ ALPHA = 0.25
 MODEL_PATH = "models/oz_lotto_rf.joblib"
 DATA_PATH = "data/historical_draws.csv"
 
+# -------------------------------
+# Ψⁿˡ(Ω) Scoring Function
+# -------------------------------
 def psi_nabla_lambda(X):
     weighted_sum = (
         LAMBDA['lambda1'] * X['fourier'] +
@@ -42,6 +48,9 @@ def psi_nabla_lambda(X):
     noise = np.random.normal(0, 0.1, size=len(X))
     return amplified + noise
 
+# -------------------------------
+# ML Classifier Training (Self-Retraining)
+# -------------------------------
 def train_classifier(data):
     features = data.drop(columns=['division'])
     labels = data['division']
@@ -51,20 +60,35 @@ def train_classifier(data):
     joblib.dump(rf, MODEL_PATH)
     return rf
 
+# -------------------------------
+# Load Model or Train if Absent
+# -------------------------------
 def load_model():
     if os.path.exists(MODEL_PATH):
-        return joblib.load(MODEL_PATH)
+        try:
+            return joblib.load(MODEL_PATH)
+        except ValueError as e:
+            st.warning("⚠️ Model is incompatible with current environment. Attempting retrain...")
+            df = load_data()
+            if not df.empty and 'division' in df.columns:
+                return train_classifier(df)
+            else:
+                st.error("Model cannot be reloaded or retrained: No suitable data available.")
+                return None
     else:
         st.warning("No model found. Please train with historical data.")
         return None
 
+# -------------------------------
+# Load Data
+# -------------------------------
 def load_data():
     if os.path.exists(DATA_PATH):
         return pd.read_csv(DATA_PATH)
     else:
         return pd.DataFrame()
 
-# UI
+# Sidebar branding
 st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/thumb/e/e1/Lotto_icon.svg/2048px-Lotto_icon.svg.png", width=100)
 st.sidebar.markdown("## OzLotter")
 st.sidebar.markdown("Smart. Predictive. Evolving.")
@@ -72,6 +96,7 @@ st.sidebar.markdown("Smart. Predictive. Evolving.")
 st.title("🎯 OzLotter — Intelligent Lotto Insights with Ψⁿˡ(Ω)")
 st.markdown("Welcome to OzLotter — your AI-powered assistant for smarter Oz Lotto predictions.")
 
+# Draw Entry Form
 with st.expander("📥 Enter New Oz Lotto Draw"):
     with st.form("draw_entry_form"):
         date = st.date_input("Draw Date")
@@ -97,6 +122,7 @@ with st.expander("📥 Enter New Oz Lotto Draw"):
             except:
                 st.error("Invalid input. Please ensure 7 main and 3 supplementary numbers.")
 
+# Upload Predictions
 with st.expander("📊 Upload Prediction Feature Set for Scoring"):
     upload = st.file_uploader("Upload CSV with required feature columns", type="csv")
     if upload:
@@ -111,18 +137,28 @@ with st.expander("📊 Upload Prediction Feature Set for Scoring"):
         else:
             st.error("CSV missing required columns.")
 
+# Optional retrain trigger
 with st.expander("📊 Feature Impact (SHAP Analysis)"):
     df_hist = load_data()
-    if os.path.exists(MODEL_PATH) and not df_hist.empty and 'division' in df_hist.columns:
+    model = None
+    try:
         model = load_model()
-        explainer = shap.Explainer(model, df_hist.drop(columns=['division', 'date', 'main', 'supp'], errors='ignore'))
-        shap_values = explainer(df_hist.drop(columns=['division', 'date', 'main', 'supp'], errors='ignore'))
-        st.set_option('deprecation.showPyplotGlobalUse', False)
-        st.write("### Feature Importance Summary")
-        shap.summary_plot(shap_values, df_hist.drop(columns=['division', 'date', 'main', 'supp'], errors='ignore'), plot_type="bar")
-        st.pyplot(bbox_inches='tight')
+    except Exception as e:
+        st.warning("Model loading failed during SHAP analysis. Attempting fallback...")
+        if not df_hist.empty and 'division' in df_hist.columns:
+            model = train_classifier(df_hist)
 
-with st.expander("🔁 Retrain Model from Updated Data"):
+    if model and not df_hist.empty and 'division' in df_hist.columns:
+        try:
+            explainer = shap.Explainer(model, df_hist.drop(columns=['division', 'date', 'main', 'supp'], errors='ignore'))
+            shap_values = explainer(df_hist.drop(columns=['division', 'date', 'main', 'supp'], errors='ignore'))
+            st.set_option('deprecation.showPyplotGlobalUse', False)
+            st.write("### Feature Importance Summary")
+            shap.summary_plot(shap_values, df_hist.drop(columns=['division', 'date', 'main', 'supp'], errors='ignore'), plot_type="bar")
+            st.pyplot(bbox_inches='tight')
+        except Exception as ex:
+            st.error("❌ SHAP analysis failed: " + str(ex))
+
     if st.button("Retrain Now"):
         df_hist = load_data()
         if 'division' in df_hist.columns:
