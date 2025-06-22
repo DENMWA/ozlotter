@@ -131,22 +131,28 @@ with st.expander("📥 Enter New Oz Lotto Draw"):
             except:
                 st.error("Invalid input. Please ensure 7 main and 3 supplementary numbers.")
 
-# Upload Predictions
-with st.expander("📊 Upload Prediction Feature Set for Scoring"):
-    upload = st.file_uploader("Upload CSV with required feature columns", type="csv")
-    if upload:
-        df_pred = pd.read_csv(upload)
-        if all(col in df_pred.columns for col in ['fourier','entropy','mahalanobis','bayesian','penalty','momentum','integral','avg_freq']):
-            df_pred['psi_score'] = psi_nabla_lambda(df_pred)
-            model = load_model()
-            if model:
-                df_pred['division_pred'] = model.predict(df_pred)
-                df_pred['div_prob'] = model.predict_proba(df_pred).max(axis=1)
-            st.dataframe(df_pred.head())
-        else:
-            st.error("CSV missing required columns.")
+# Internal Prediction Generator
+with st.expander("🔮 Generate Predictions Internally"):
+    num_sets = st.slider("Number of prediction sets", 5, 100, 20)
+    df_synthetic = pd.DataFrame({
+        'fourier': np.random.uniform(0, 1, num_sets),
+        'entropy': np.random.uniform(0, 1, num_sets),
+        'mahalanobis': np.random.uniform(0, 1, num_sets),
+        'bayesian': np.random.uniform(0, 1, num_sets),
+        'penalty': np.random.uniform(0, 1, num_sets),
+        'momentum': np.random.uniform(0, 1, num_sets),
+        'integral': np.random.uniform(0, 1, num_sets),
+        'avg_freq': np.random.uniform(0, 1, num_sets),
+    })
+    df_synthetic['psi_score'] = psi_nabla_lambda(df_synthetic)
+    model = load_model()
+    if model:
+        df_synthetic['division_pred'] = model.predict(df_synthetic)
+        df_synthetic['div_prob'] = model.predict_proba(df_synthetic).max(axis=1)
+        st.write("### Top Ranked Prediction Sets")
+        st.dataframe(df_synthetic.sort_values(by='psi_score', ascending=False).head(10))
 
-# SHAP Analysis + Retrain
+# SHAP Analysis
 with st.expander("📊 Feature Impact (SHAP Analysis)"):
     df_hist = load_data()
     model = None
