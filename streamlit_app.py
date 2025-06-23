@@ -1,3 +1,4 @@
+
 # streamlit_app.py - OzLotter: Intelligent Oz Lotto Prediction Engine
 
 import streamlit as st
@@ -14,9 +15,7 @@ from sklearn.metrics import classification_report
 
 st.set_page_config(page_title="OzLotter", page_icon="🎯", layout="wide")
 
-# -------------------------------
 # Configurable λ-weights
-# -------------------------------
 LAMBDA = {
     'lambda1': 1.0,
     'lambda2': 1.0,
@@ -31,9 +30,6 @@ ALPHA = 0.25
 MODEL_PATH = "models/oz_lotto_rf.joblib"
 DATA_PATH = "data/historical_draws.csv"
 
-# -------------------------------
-# Ψⁿˡ(Ω) Scoring Function
-# -------------------------------
 def psi_nabla_lambda(X):
     weighted_sum = (
         LAMBDA['lambda1'] * X['fourier'] +
@@ -48,9 +44,6 @@ def psi_nabla_lambda(X):
     noise = np.random.normal(0, 0.1, size=len(X))
     return amplified + noise
 
-# -------------------------------
-# ML Classifier Training (Self-Retraining)
-# -------------------------------
 def train_classifier(data):
     drop_cols = ['division', 'date', 'main', 'supp']
     features = data.drop(columns=[col for col in drop_cols if col in data.columns], errors='ignore')
@@ -64,61 +57,47 @@ def train_classifier(data):
     joblib.dump(rf, MODEL_PATH)
     return rf
 
-# -------------------------------
-# Load Model or Train if Absent
-# -------------------------------
 def load_model():
     if os.path.exists(MODEL_PATH):
         try:
             return joblib.load(MODEL_PATH)
         except ValueError as e:
-            st.warning("⚠️ Model is incompatible with current environment. Attempting retrain...")
+            st.warning("⚠️ Model incompatible. Retrying with retrain...")
             df = load_data()
             if not df.empty and 'division' in df.columns:
                 return train_classifier(df)
             else:
-                st.error("Model cannot be reloaded or retrained: No suitable data available.")
+                st.error("Cannot retrain model due to missing data.")
                 return None
     else:
-        st.warning("No model found. Please train with historical data.")
+        st.warning("No model found.")
         return None
 
-# -------------------------------
-# Load Data
-# -------------------------------
 def load_data():
     if os.path.exists(DATA_PATH):
         return pd.read_csv(DATA_PATH)
     else:
         return pd.DataFrame()
 
-# -------------------------------
-# App Interface
-import shap
-import matplotlib.pyplot as plt
-
-# Sidebar branding
+# Interface
 st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/thumb/e/e1/Lotto_icon.svg/2048px-Lotto_icon.svg.png", width=100)
 st.sidebar.markdown("## OzLotter")
 st.sidebar.markdown("Smart. Predictive. Evolving.")
-# -------------------------------
+
 st.title("🎯 OzLotter — Intelligent Lotto Insights with Ψⁿˡ(Ω)")
 st.markdown("Welcome to OzLotter — your AI-powered assistant for smarter Oz Lotto predictions.")
 
-# Draw Entry Form
 with st.expander("📥 Enter New Oz Lotto Draw"):
     with st.form("draw_entry_form"):
         date = st.date_input("Draw Date")
         main = st.text_input("7 Main Numbers (comma separated)")
         supp = st.text_input("3 Supplementary Numbers (comma separated)")
         submitted = st.form_submit_button("Submit Draw")
-
         if submitted:
             try:
                 main_numbers = [int(x.strip()) for x in main.split(",")]
                 supp_numbers = [int(x.strip()) for x in supp.split(",")]
                 assert len(main_numbers) == 7 and len(supp_numbers) == 3
-
                 st.success(f"Draw saved: {date} | Main: {main_numbers} | Supps: {supp_numbers}")
                 new_row = pd.DataFrame([{"date": date, "main": main, "supp": supp}])
                 if os.path.exists(DATA_PATH):
@@ -129,9 +108,8 @@ with st.expander("📥 Enter New Oz Lotto Draw"):
                 df.to_csv(DATA_PATH, index=False)
                 st.rerun()
             except:
-                st.error("Invalid input. Please ensure 7 main and 3 supplementary numbers.")
+                st.error("❌ Invalid input. Enter 7 main and 3 supp numbers.")
 
-# Internal Prediction Generator
 with st.expander("🔮 Generate Predictions Internally"):
     num_sets = st.slider("Number of prediction sets", 5, 100, 20)
     df_synthetic = pd.DataFrame({
@@ -147,22 +125,20 @@ with st.expander("🔮 Generate Predictions Internally"):
     df_synthetic['psi_score'] = psi_nabla_lambda(df_synthetic)
     model = load_model()
     if model:
-        df_synthetic['division_pred'] = model.predict(df_synthetic)
-        df_synthetic['div_prob'] = model.predict_proba(df_synthetic).max(axis=1)
+        X_pred = df_synthetic.drop(columns=['psi_score'], errors='ignore')
+        df_synthetic['division_pred'] = model.predict(X_pred)
+        df_synthetic['div_prob'] = model.predict_proba(X_pred).max(axis=1)
         st.write("### Top Ranked Prediction Sets")
         st.dataframe(df_synthetic.sort_values(by='psi_score', ascending=False).head(10))
 
-# SHAP Analysis
 with st.expander("📊 Feature Impact (SHAP Analysis)"):
     df_hist = load_data()
     model = None
     try:
         model = load_model()
-    except Exception as e:
-        st.warning("Model loading failed during SHAP analysis. Attempting fallback...")
+    except Exception:
         if not df_hist.empty and 'division' in df_hist.columns:
             model = train_classifier(df_hist)
-
     if model and not df_hist.empty and 'division' in df_hist.columns:
         try:
             explainer = shap.Explainer(model, df_hist.drop(columns=['division', 'date', 'main', 'supp'], errors='ignore'))
