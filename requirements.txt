@@ -1,7 +1,9 @@
 streamlit
-scikit-learn==1.1.3
-joblib
-numpy
+scikit-learn
 pandas
+numpy
+joblib
 shap
 matplotlib
+setuptools>=42
+wheel
