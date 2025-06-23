@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: ozlotter
+    env: python
+    buildCommand: ""
+    startCommand: streamlit run streamlit_app.py

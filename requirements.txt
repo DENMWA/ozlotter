@@ -1,9 +1,9 @@
 streamlit
-scikit-learn
-pandas
 numpy
-joblib
-shap
+pandas
+scikit-learn
 matplotlib
-setuptools>=42
+shap
+joblib
+setuptools
 wheel
